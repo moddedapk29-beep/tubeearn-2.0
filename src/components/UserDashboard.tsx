@@ -165,6 +165,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onOpenWallet, onOp
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="px-3 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs flex items-center gap-2">
+              <span className="text-slate-400">Earner:</span>
+              <span className="font-bold text-slate-200">{currentUser.name}</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase">
+                {currentUser.kycStatus === 'verified' ? 'KYC Verified' : 'KYC Pending'}
+              </span>
+            </div>
+
+            <div className="px-3 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs flex items-center gap-2">
               <span className="text-slate-400">Available:</span>
               <span className="font-bold text-emerald-400 font-mono">₹{currentUser.walletBalance.toFixed(2)}</span>
             </div>

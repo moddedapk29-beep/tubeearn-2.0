@@ -28,10 +28,16 @@ interface AppContextType {
   withdrawals: WithdrawalRequest[];
   fraudLogs: FraudSignalLog[];
   isGoogleLoading: boolean;
+  authenticatedRoles: Record<UserRole, boolean>;
   
   // Auth methods
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  signOutRole: (role?: UserRole) => void;
+  loginAsUser: (data?: { email?: string; name?: string; isNew?: boolean }) => Promise<{ success: boolean; message: string }>;
+  loginAsCreator: (data?: { email?: string; name?: string; channelName?: string; handle?: string; isNew?: boolean }) => Promise<{ success: boolean; message: string }>;
+  loginAsAdmin: (securityKey: string) => Promise<{ success: boolean; message: string }>;
+  isRoleAuthenticated: (role: UserRole) => boolean;
   updateKyc: (status: KycStatus, documentType?: 'aadhaar' | 'pan' | 'voter_id', docNumber?: string) => void;
   connectSocialAccount: (platform: 'youtube' | 'instagram' | 'facebook', handle: string, channelName?: string) => void;
   
@@ -57,6 +63,30 @@ const STORAGE_KEY = 'tubeearn_v1_store';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRole] = useState<UserRole>('user');
+  const [roleProfiles, setRoleProfiles] = useState<Record<UserRole, UserProfile>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '_role_profiles');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return {
+      user: initialUserProfiles['user_demo_1'],
+      creator: initialUserProfiles['creator_demo_1'],
+      admin: initialUserProfiles['admin_demo_1']
+    };
+  });
+
+  const [authenticatedRoles, setAuthenticatedRoles] = useState<Record<UserRole, boolean>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '_auth_roles');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return {
+      user: true,
+      creator: true,
+      admin: false
+    };
+  });
+
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '_user');
     if (saved) {
@@ -102,7 +132,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync to local storage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY + '_user', JSON.stringify(currentUser));
-  }, [currentUser]);
+    localStorage.setItem(STORAGE_KEY + '_role_profiles', JSON.stringify(roleProfiles));
+  }, [currentUser, roleProfiles]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY + '_auth_roles', JSON.stringify(authenticatedRoles));
+  }, [authenticatedRoles]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY + '_campaigns', JSON.stringify(campaigns));
@@ -122,14 +157,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Handle Role Switching
   useEffect(() => {
-    if (currentRole === 'creator') {
-      setCurrentUser(initialUserProfiles['creator_demo_1']);
-    } else if (currentRole === 'admin') {
-      setCurrentUser(initialUserProfiles['admin_demo_1']);
-    } else {
-      setCurrentUser(initialUserProfiles['user_demo_1']);
-    }
+    const profile = roleProfiles[currentRole] || initialUserProfiles[`${currentRole}_demo_1`];
+    setCurrentUser(profile);
   }, [currentRole]);
+
+  // Check role authentication status
+  const isRoleAuthenticated = (role: UserRole) => {
+    return !!authenticatedRoles[role];
+  };
+
+  // Dedicated User Login
+  const loginAsUser = async (data?: { email?: string; name?: string; isNew?: boolean }) => {
+    const email = data?.email || 'aarav.sharma@example.com';
+    const name = data?.name || 'Aarav Sharma';
+    
+    const existing = roleProfiles.user || initialUserProfiles['user_demo_1'];
+    const updated: UserProfile = {
+      ...existing,
+      email,
+      name,
+      role: 'user',
+      walletBalance: data?.isNew ? 150.0 : (existing.walletBalance || 342.0),
+      kycStatus: data?.isNew ? 'pending' : (existing.kycStatus || 'verified'),
+      updatedAt: new Date().toISOString()
+    };
+
+    setRoleProfiles(prev => ({ ...prev, user: updated }));
+    setCurrentUser(updated);
+    setCurrentRole('user');
+    setAuthenticatedRoles(prev => ({ ...prev, user: true }));
+
+    try {
+      await setDoc(doc(db, 'users', updated.uid), updated, { merge: true });
+    } catch (e) {
+      // offline fallback
+    }
+
+    return { success: true, message: `Welcome ${name}! Authenticated to Earner Portal.` };
+  };
+
+  // Dedicated Creator Login
+  const loginAsCreator = async (data?: { email?: string; name?: string; channelName?: string; handle?: string; isNew?: boolean }) => {
+    const email = data?.email || 'priya.patel@creators.com';
+    const name = data?.name || 'Priya Patel (Creator)';
+    const handle = data?.handle || '@TechVibeStudio';
+
+    const existing = roleProfiles.creator || initialUserProfiles['creator_demo_1'];
+    const updated: UserProfile = {
+      ...existing,
+      email,
+      name,
+      role: 'creator',
+      walletBalance: data?.isNew ? 5000.0 : (existing.walletBalance || 12450.0),
+      connectedAccounts: {
+        ...existing.connectedAccounts,
+        youtube: {
+          connected: true,
+          channelName: data?.channelName || 'Creator Studio',
+          handle,
+          verifiedAt: new Date().toISOString().split('T')[0]
+        }
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    setRoleProfiles(prev => ({ ...prev, creator: updated }));
+    setCurrentUser(updated);
+    setCurrentRole('creator');
+    setAuthenticatedRoles(prev => ({ ...prev, creator: true }));
+
+    try {
+      await setDoc(doc(db, 'users', updated.uid), updated, { merge: true });
+    } catch (e) {
+      // offline fallback
+    }
+
+    return { success: true, message: `Welcome ${name}! Authenticated to Creator Studio.` };
+  };
+
+  // Dedicated Master Admin Login (Passkey Gated)
+  const loginAsAdmin = async (securityKey: string) => {
+    const cleaned = securityKey.trim().toUpperCase();
+    if (cleaned !== 'ADMIN2026' && cleaned !== '2991000' && cleaned !== 'ADMIN') {
+      return {
+        success: false,
+        message: 'Invalid administrative security passkey. Access denied.'
+      };
+    }
+
+    const adminProfile = roleProfiles.admin || initialUserProfiles['admin_demo_1'];
+    setRoleProfiles(prev => ({ ...prev, admin: adminProfile }));
+    setCurrentUser(adminProfile);
+    setCurrentRole('admin');
+    setAuthenticatedRoles(prev => ({ ...prev, admin: true }));
+
+    return {
+      success: true,
+      message: 'Access granted. Master Administrative Console authenticated.'
+    };
+  };
+
+  const signOutRole = (role?: UserRole) => {
+    const target = role || currentRole;
+    setAuthenticatedRoles(prev => ({ ...prev, [target]: false }));
+    if (target === 'admin') {
+      setCurrentRole('user');
+      setCurrentUser(roleProfiles.user);
+    }
+  };
 
   // Listen to Firebase Auth state
   useEffect(() => {
@@ -198,7 +333,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       // ignore
     }
-    setCurrentUser(initialUserProfiles['user_demo_1']);
+    signOutRole(currentRole);
   };
 
   // KYC Update
@@ -588,8 +723,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         withdrawals,
         fraudLogs,
         isGoogleLoading,
+        authenticatedRoles,
         signInWithGoogle,
         signOut,
+        signOutRole,
+        loginAsUser,
+        loginAsCreator,
+        loginAsAdmin,
+        isRoleAuthenticated,
         updateKyc,
         connectSocialAccount,
         addCreatorFunds,

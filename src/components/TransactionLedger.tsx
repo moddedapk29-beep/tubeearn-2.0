@@ -33,16 +33,19 @@ interface TransactionLedgerProps {
   userId?: string;
   limitCount?: number;
   showHeader?: boolean;
+  isFullSystemView?: boolean;
 }
 
 export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   className = '',
   userId,
   limitCount,
-  showHeader = true
+  showHeader = true,
+  isFullSystemView = false
 }) => {
   const { currentUser, transactions: fallbackTransactions } = useApp();
   const effectiveUserId = userId || currentUser.uid;
+  const isAllView = isFullSystemView || userId === 'ALL';
 
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -55,15 +58,17 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   // Sync initial seed data to Firestore if empty, so the user has immediate live Firestore records
   const seedInitialTransactionsIfEmpty = async () => {
     try {
-      const q = query(
-        collection(db, 'walletTransactions'),
-        where('userId', '==', effectiveUserId)
-      );
+      const colRef = collection(db, 'walletTransactions');
+      const q = isAllView 
+        ? query(colRef)
+        : query(colRef, where('userId', '==', effectiveUserId));
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
-        // Seed with existing mock data for this user
-        const seeds = fallbackTransactions.filter(t => t.userId === effectiveUserId);
+        // Seed with existing mock data
+        const seeds = isAllView
+          ? fallbackTransactions
+          : fallbackTransactions.filter(t => t.userId === effectiveUserId);
         for (const seed of seeds) {
           await setDoc(doc(db, 'walletTransactions', seed.id), seed);
         }
@@ -79,12 +84,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     setError(null);
 
     try {
-      // Primary query on walletTransactions
+      // Query walletTransactions: all for admin full view, or scoped to effectiveUserId
       const colRef = collection(db, 'walletTransactions');
-      const q = query(
-        colRef,
-        where('userId', '==', effectiveUserId)
-      );
+      const q = isAllView
+        ? query(colRef)
+        : query(colRef, where('userId', '==', effectiveUserId));
 
       const unsubscribe = onSnapshot(
         q,
@@ -101,7 +105,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           } else {
             // Check fallback collection 'transactions' or seed
             seedInitialTransactionsIfEmpty().then(() => {
-              const localMatches = fallbackTransactions.filter(t => t.userId === effectiveUserId);
+              const localMatches = isAllView
+                ? fallbackTransactions
+                : fallbackTransactions.filter(t => t.userId === effectiveUserId);
               setTransactions(localMatches);
             });
           }
@@ -111,7 +117,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         (err) => {
           console.warn("Firestore listener error, using synchronized context fallback:", err.message);
           setError(err.message);
-          const localMatches = fallbackTransactions.filter(t => t.userId === effectiveUserId);
+          const localMatches = isAllView
+            ? fallbackTransactions
+            : fallbackTransactions.filter(t => t.userId === effectiveUserId);
           setTransactions(localMatches);
           setSource('local_fallback');
           setLoading(false);
@@ -123,7 +131,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     } catch (err: any) {
       console.error("Error setting up Firestore listener:", err);
       setError(err.message);
-      const localMatches = fallbackTransactions.filter(t => t.userId === effectiveUserId);
+      const localMatches = isAllView
+        ? fallbackTransactions
+        : fallbackTransactions.filter(t => t.userId === effectiveUserId);
       setTransactions(localMatches);
       setSource('local_fallback');
       setLoading(false);
@@ -137,7 +147,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     return () => {
       if (typeof unsub === 'function') unsub();
     };
-  }, [effectiveUserId]);
+  }, [effectiveUserId, isAllView]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -145,12 +155,27 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     fetchFirestoreTransactions();
   };
 
+  // Header title depending on view
+  const headerTitle = isAllView 
+    ? 'Master System Transaction Ledger' 
+    : currentUser.role === 'creator'
+    ? 'Creator Campaign Financial Ledger'
+    : 'Earner Rewards & Payouts Ledger';
+
+  const headerSubtitle = isAllView
+    ? 'Global double-entry audit trail across all earners, creators, and platform treasury'
+    : currentUser.role === 'creator'
+    ? 'Your escrow deposits, campaign reservations, and participant reward disbursements'
+    : 'Your verified task earnings, platform bonuses, and ₹299+ withdrawal disbursements';
+
   // Filter transactions
   const filteredTransactions = transactions.filter(t => {
     if (selectedFilter === 'deposit' && t.type !== 'deposit') return false;
     if (selectedFilter === 'reward' && !t.type.includes('reward')) return false;
     if (selectedFilter === 'withdrawal' && !t.type.includes('withdrawal')) return false;
     if (selectedFilter === 'campaign' && !t.type.includes('campaign')) return false;
+    if (selectedFilter === 'earner_only' && !t.type.includes('reward') && !t.type.includes('withdrawal')) return false;
+    if (selectedFilter === 'creator_only' && !t.type.includes('deposit') && !t.type.includes('campaign')) return false;
     
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -159,7 +184,8 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         t.type.toLowerCase().includes(q) ||
         t.id.toLowerCase().includes(q) ||
         t.referenceId.toLowerCase().includes(q) ||
-        t.status.toLowerCase().includes(q)
+        t.status.toLowerCase().includes(q) ||
+        (t.userId && t.userId.toLowerCase().includes(q))
       );
     }
     return true;
@@ -251,19 +277,25 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Database className="w-4 h-4 text-emerald-400" />
-                Wallet Transaction Ledger
+                {headerTitle}
               </h3>
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                source === 'firestore'
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-              }`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                Firestore db: walletTransactions
-              </span>
+              {isAllView ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold">
+                  FULL ACCESS ADMIN VIEW
+                </span>
+              ) : (
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                  source === 'firestore'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                }`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                  Firestore db: walletTransactions
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live double-entry financial ledger recording deposits, task rewards, and payouts
+              {headerSubtitle}
             </p>
           </div>
 
@@ -288,7 +320,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
           <input
             type="text"
-            placeholder="Search reference, type, ID..."
+            placeholder={isAllView ? "Search user ID, ref, type..." : "Search reference, type, ID..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 pl-8 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -297,13 +329,22 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {[
+          {(isAllView ? [
+            { id: 'all', label: 'All Entries' },
+            { id: 'earner_only', label: 'Earners' },
+            { id: 'creator_only', label: 'Creators' },
+            { id: 'withdrawal', label: 'Withdrawals' },
+            { id: 'deposit', label: 'Deposits' },
+            { id: 'campaign', label: 'Escrow' }
+          ] : currentUser.role === 'creator' ? [
             { id: 'all', label: 'All Entries' },
             { id: 'deposit', label: 'Deposits' },
+            { id: 'campaign', label: 'Campaign Escrow' }
+          ] : [
+            { id: 'all', label: 'All Entries' },
             { id: 'reward', label: 'Task Rewards' },
-            { id: 'withdrawal', label: 'Withdrawals' },
-            { id: 'campaign', label: 'Escrow' }
-          ].map(f => (
+            { id: 'withdrawal', label: 'Withdrawals' }
+          ]).map(f => (
             <button
               key={f.id}
               onClick={() => setSelectedFilter(f.id)}
@@ -374,6 +415,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono flex-wrap">
+                      {isAllView && (
+                        <>
+                          <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
+                            User: {tx.userId}
+                          </span>
+                          <span>&bull;</span>
+                        </>
+                      )}
                       <span>Ref: {tx.referenceId}</span>
                       <span>&bull;</span>
                       <span className="text-slate-400">

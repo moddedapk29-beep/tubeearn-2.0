@@ -137,6 +137,38 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({ onOpenWallet
   return (
     <div className="space-y-6">
       
+      {/* Creator Studio Identity Banner */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900 to-slate-900 border border-rose-500/20 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <img 
+            src={currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=f43f5e&color=fff`} 
+            alt={currentUser.name}
+            className="w-12 h-12 rounded-2xl border-2 border-rose-500/40 object-cover"
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-black text-white">{currentUser.name}</h1>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 uppercase font-bold">
+                Creator Studio
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              {currentUser.connectedAccounts.youtube?.channelName || 'Studio Account'} &bull; {currentUser.connectedAccounts.youtube?.handle || '@creator'} &bull; Min. 1,000 participant escrow reserve
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCreating(!isCreating)}
+            className="px-4 py-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isCreating ? 'Close Creator Form' : 'New Campaign (1,000+ Viewers)'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Creator Top Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         

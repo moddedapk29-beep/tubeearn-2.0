@@ -16,7 +16,8 @@ import {
   UserCheck,
   Search,
   RefreshCw,
-  FileText
+  FileText,
+  LogOut
 } from 'lucide-react';
 import { auditFraudDeepThinking } from '../gemini';
 import confetti from 'canvas-confetti';
@@ -28,7 +29,8 @@ export const AdminDashboard: React.FC = () => {
     campaigns, 
     fraudLogs, 
     processWithdrawalAdmin,
-    addFraudSignalLog
+    addFraudSignalLog,
+    signOutRole
   } = useApp();
 
   const [activeAdminTab, setActiveAdminTab] = useState<'withdrawals' | 'fraud' | 'kyc' | 'ledger'>('withdrawals');
@@ -128,6 +130,15 @@ export const AdminDashboard: React.FC = () => {
             >
               <BrainCircuit className="w-4 h-4 text-purple-400" />
               Gemini High Thinking Audit
+            </button>
+
+            <button
+              onClick={() => signOutRole('admin')}
+              className="px-3 py-2 bg-slate-900/80 hover:bg-slate-800 text-rose-300 border border-slate-700/80 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+              title="Sign out of Administrator Session"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              Exit Admin
             </button>
           </div>
         </div>

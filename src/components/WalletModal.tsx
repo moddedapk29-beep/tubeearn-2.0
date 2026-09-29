@@ -28,15 +28,30 @@ interface WalletModalProps {
 export const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onOpenKyc }) => {
   const { 
     currentUser, 
+    currentRole,
     transactions, 
     addCreatorFunds, 
     requestWithdrawal 
   } = useApp();
 
+  const role = currentUser.role || currentRole || 'user';
+  const isAdmin = role === 'admin';
+  const isCreator = role === 'creator';
+  const isEarner = role === 'user';
+
   const [activeTab, setActiveTab] = useState<'overview' | 'add' | 'withdraw' | 'ledger'>('overview');
   
+  // Ensure active tab is appropriate for the role when modal opens
+  React.useEffect(() => {
+    if (isEarner && activeTab === 'add') {
+      setActiveTab('overview');
+    } else if (isCreator && activeTab === 'withdraw') {
+      setActiveTab('overview');
+    }
+  }, [role, isOpen]);
+
   // Add Money Form State
-  const [addAmount, setAddAmount] = useState<number>(500);
+  const [addAmount, setAddAmount] = useState<number>(isAdmin ? 25000 : 500);
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking'>('upi');
   const [isProcessingAdd, setIsProcessingAdd] = useState(false);
   const [addStatusMessage, setAddStatusMessage] = useState<string | null>(null);
@@ -121,17 +136,35 @@ export const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onOpe
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+              isAdmin 
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                : isCreator 
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            }`}>
               <Wallet className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                TubeEarn Wallet Hub
-                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  INR Ledger
+                {isAdmin ? 'Master Treasury & Escrow Console' : isCreator ? 'Creator Escrow Wallet' : 'Earner Rewards Wallet'}
+                <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded-full border ${
+                  isAdmin 
+                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' 
+                    : isCreator 
+                    ? 'bg-rose-500/10 text-rose-300 border-rose-500/30' 
+                    : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  {isAdmin ? 'FULL ACCESS' : isCreator ? 'CREATOR ESCROW' : 'EARNER INR'}
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">Escrow-backed balance and automated UPI / Bank payouts</p>
+              <p className="text-xs text-slate-400">
+                {isAdmin 
+                  ? 'Master platform treasury reserves, liquidity controls, and global transactions' 
+                  : isCreator 
+                  ? 'Escrow-backed balance to fund minimum 1,000 participant video campaigns' 
+                  : 'Task earnings, verified KYC, and automated UPI / Bank payouts'}
+              </p>
             </div>
           </div>
           <button 
@@ -143,48 +176,61 @@ export const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onOpe
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 px-5 bg-slate-950/40">
+        <div className="flex border-b border-slate-800 px-5 bg-slate-950/40 overflow-x-auto">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all ${
+            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all shrink-0 ${
               activeTab === 'overview'
-                ? 'border-emerald-500 text-emerald-400'
+                ? isAdmin ? 'border-amber-500 text-amber-400' : isCreator ? 'border-rose-500 text-rose-400' : 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             Overview
           </button>
-          <button
-            onClick={() => setActiveTab('add')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'add'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
-            Add Funds
-          </button>
-          <button
-            onClick={() => setActiveTab('withdraw')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'withdraw'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <ArrowUpRight className="w-3.5 h-3.5 text-rose-400" />
-            Withdraw (₹299+)
-          </button>
+
+          {/* Add Funds: Creator & Admin only */}
+          {(isCreator || isAdmin) && (
+            <button
+              onClick={() => setActiveTab('add')}
+              className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'add'
+                  ? isAdmin ? 'border-amber-500 text-amber-400' : 'border-rose-500 text-rose-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
+              {isAdmin ? 'Deposit Treasury' : 'Deposit Escrow (Add Funds)'}
+            </button>
+          )}
+
+          {/* Withdraw: Earner & Admin only */}
+          {(isEarner || isAdmin) && (
+            <button
+              onClick={() => setActiveTab('withdraw')}
+              className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'withdraw'
+                  ? isAdmin ? 'border-amber-500 text-amber-400' : 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ArrowUpRight className="w-3.5 h-3.5 text-rose-400" />
+              {isAdmin ? 'Disbursement Payouts' : 'Withdraw (₹299+)'}
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('ledger')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all ${
+            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all shrink-0 ${
               activeTab === 'ledger'
-                ? 'border-emerald-500 text-emerald-400'
+                ? isAdmin ? 'border-amber-500 text-amber-400' : isCreator ? 'border-rose-500 text-rose-400' : 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Ledger ({userTransactions.length})
+            {isAdmin 
+              ? `Global Ledger (${transactions.length})` 
+              : isCreator 
+              ? `Campaign Ledger (${userTransactions.length})` 
+              : `Earnings Ledger (${userTransactions.length})`}
           </button>
         </div>
 
@@ -235,66 +281,108 @@ export const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onOpe
                 </div>
               </div>
 
-              {/* Progress to ₹299 Withdrawal */}
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    Minimum Payout Threshold (₹299)
-                  </span>
-                  <span className="font-mono text-slate-400">
-                    ₹{Math.min(299, currentUser.walletBalance).toFixed(2)} / ₹299.00
-                  </span>
-                </div>
-                
-                <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-500 rounded-full ${
-                      currentUser.walletBalance >= 299 ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-emerald-400'
-                    }`}
-                    style={{ width: `${Math.min(100, (currentUser.walletBalance / 299) * 100)}%` }}
-                  />
-                </div>
-
-                <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1">
-                  {currentUser.walletBalance >= 299 ? (
-                    <span className="text-emerald-400 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Eligible for instant withdrawal!
+              {/* Progress to ₹299 Withdrawal - Earner Only */}
+              {isEarner && (
+                <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Minimum Payout Threshold (₹299)
                     </span>
-                  ) : (
-                    <span>
-                      Earn ₹{(299 - currentUser.walletBalance).toFixed(2)} more to reach withdraw threshold.
+                    <span className="font-mono text-slate-400">
+                      ₹{Math.min(299, currentUser.walletBalance).toFixed(2)} / ₹299.00
                     </span>
-                  )}
+                  </div>
+                  
+                  <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 rounded-full ${
+                        currentUser.walletBalance >= 299 ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-emerald-400'
+                      }`}
+                      style={{ width: `${Math.min(100, (currentUser.walletBalance / 299) * 100)}%` }}
+                    />
+                  </div>
 
-                  <button 
-                    onClick={() => setActiveTab('withdraw')}
-                    disabled={currentUser.walletBalance < 299}
-                    className={`font-semibold underline ${
-                      currentUser.walletBalance >= 299 ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-600 cursor-not-allowed'
-                    }`}
+                  <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1">
+                    {currentUser.walletBalance >= 299 ? (
+                      <span className="text-emerald-400 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Eligible for instant withdrawal!
+                      </span>
+                    ) : (
+                      <span>
+                        Earn ₹{(299 - currentUser.walletBalance).toFixed(2)} more to reach withdraw threshold.
+                      </span>
+                    )}
+
+                    <button 
+                      onClick={() => setActiveTab('withdraw')}
+                      disabled={currentUser.walletBalance < 299}
+                      className={`font-semibold underline ${
+                        currentUser.walletBalance >= 299 ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-600 cursor-not-allowed'
+                      }`}
+                    >
+                      Withdraw Now &rarr;
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Creator Escrow Reserve Allocation - Creator Only */}
+              {isCreator && (
+                <div className="bg-slate-950/60 border border-rose-500/20 p-4 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Lock className="w-4 h-4 text-rose-400" />
+                      Creator Campaign Escrow Health
+                    </span>
+                    <span className="font-mono text-rose-400 font-bold">
+                      100% Escrow Protected
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Your escrow balance funds task completions. Funds are disbursed to verified earners only after review.
+                  </p>
+                  <div className="pt-1">
+                    <button
+                      onClick={() => setActiveTab('add')}
+                      className="w-full py-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
+                    >
+                      <ArrowDownLeft className="w-3.5 h-3.5" />
+                      Deposit More Escrow Funds
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Actions depending on role */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(isCreator || isAdmin) && (
+                  <button
+                    onClick={() => setActiveTab('add')}
+                    className="p-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 transition-all"
                   >
-                    Withdraw Now &rarr;
+                    <ArrowDownLeft className="w-4 h-4" />
+                    {isAdmin ? 'Add Treasury Liquidity' : 'Deposit Escrow Funds'}
                   </button>
-                </div>
-              </div>
+                )}
 
-              {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-3">
+                {(isEarner || isAdmin) && (
+                  <button
+                    onClick={() => setActiveTab('withdraw')}
+                    className="p-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    {isAdmin ? 'Review Payouts' : 'Request Payout (₹299+)'}
+                  </button>
+                )}
+
                 <button
-                  onClick={() => setActiveTab('add')}
-                  className="p-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  onClick={() => setActiveTab('ledger')}
+                  className="p-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition-all sm:col-span-2"
                 >
-                  <ArrowDownLeft className="w-4 h-4" />
-                  Add Funds to Wallet
-                </button>
-                <button
-                  onClick={() => setActiveTab('withdraw')}
-                  className="p-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Request Payout (₹299+)
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  {isAdmin ? 'View Full System Double-Entry Ledger' : 'View Complete Transaction Ledger'}
                 </button>
               </div>
 
@@ -614,7 +702,11 @@ export const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onOpe
           {/* TAB 4: IMMUTABLE TRANSACTION LEDGER */}
           {activeTab === 'ledger' && (
             <div className="space-y-4">
-              <TransactionLedger userId={currentUser.uid} showHeader={false} />
+              <TransactionLedger 
+                userId={isAdmin ? undefined : currentUser.uid} 
+                isFullSystemView={isAdmin} 
+                showHeader={false} 
+              />
             </div>
           )}
 

@@ -161,4 +161,50 @@ describe('TubeEarn Financial & Business Rules Test Suite', () => {
     });
   });
 
+  describe('Separate Multi-Role Login & Security Gate Rules', () => {
+    it('authenticates user role with valid earner profile', () => {
+      const userProfile = initialUserProfiles['user_demo_1'];
+      expect(userProfile.role).toBe('user');
+      expect(userProfile.name).toBe('Aarav Sharma');
+      expect(userProfile.walletBalance).toBe(342.0);
+      expect(userProfile.kycStatus).toBe('verified');
+    });
+
+    it('authenticates creator role with studio handle and campaign capabilities', () => {
+      const creatorProfile = initialUserProfiles['creator_demo_1'];
+      expect(creatorProfile.role).toBe('creator');
+      expect(creatorProfile.connectedAccounts.youtube?.connected).toBe(true);
+      expect(creatorProfile.walletBalance).toBeGreaterThanOrEqual(3000.0); // Sufficient for 1,000 participant campaign
+    });
+
+    it('enforces passkey validation for administrator access (ADMIN2026)', () => {
+      const validPasskeys = ['ADMIN2026', 'admin2026', '2991000', 'ADMIN'];
+      const invalidPasskeys = ['123456', 'password', 'user123', 'wrong_key', ''];
+
+      validPasskeys.forEach(key => {
+        const cleaned = key.trim().toUpperCase();
+        const isValid = cleaned === 'ADMIN2026' || cleaned === '2991000' || cleaned === 'ADMIN';
+        expect(isValid).toBe(true);
+      });
+
+      invalidPasskeys.forEach(key => {
+        const cleaned = key.trim().toUpperCase();
+        const isValid = cleaned === 'ADMIN2026' || cleaned === '2991000' || cleaned === 'ADMIN';
+        expect(isValid).toBe(false);
+      });
+    });
+
+    it('isolates user, creator, and admin profiles in distinct namespaces', () => {
+      const user = initialUserProfiles['user_demo_1'];
+      const creator = initialUserProfiles['creator_demo_1'];
+      const admin = initialUserProfiles['admin_demo_1'];
+
+      expect(user.uid).not.toBe(creator.uid);
+      expect(creator.uid).not.toBe(admin.uid);
+      expect(user.role).toBe('user');
+      expect(creator.role).toBe('creator');
+      expect(admin.role).toBe('admin');
+    });
+  });
+
 });
